@@ -1,5 +1,9 @@
-/* Service Worker — Sprachkurs Offline-Cache */
-const CACHE = 'sprachen-v3';
+/* Service Worker — Sprachkurs
+   Strategie: NETWORK-FIRST mit kugelsicherem Offline-Rückfall.
+   - Online: immer die neueste Version vom Server, frisch in den Cache.
+   - Offline: die zuletzt gespeicherte Version aus dem Cache.
+   Updates sind sofort sichtbar UND die App läuft offline. */
+const CACHE = 'sprachen-v5';
 const FILES = [
   './',
   './index.html',
@@ -10,27 +14,57 @@ const FILES = [
   './manifest.webmanifest'
 ];
 
-/* Beim Installieren: alle Dateien cachen */
+/* Installieren: jede Datei EINZELN cachen.
+   Wenn eine Datei fehlt/fehlschlägt, kippt das nicht den ganzen Cache. */
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(FILES))
+    caches.open(CACHE).then(cache =>
+      Promise.all(FILES.map(f => cache.add(f).catch(() => {})))
+    )
   );
   self.skipWaiting();
 });
 
-/* Beim Aktivieren: alte Caches löschen */
+/* Aktivieren: alte Caches löschen, sofort übernehmen */
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-/* Jede Anfrage: erst aus Cache, dann Netz */
+/* Anfragen behandeln */
 self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+
+  /* Navigation (die Seite selbst): Netz zuerst, frisch cachen.
+     Offline → gespeicherte index.html zurückgeben. */
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request)
+        .then(resp => {
+          const copy = resp.clone();
+          caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
+          return resp;
+        })
+        .catch(() =>
+          caches.match('./index.html')
+            .then(c => c || caches.match('./'))
+            .then(c => c || caches.match(e.request))
+        )
+    );
+    return;
+  }
+
+  /* Alle anderen Dateien (Icons, Manifest): Netz zuerst, dann Cache */
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    fetch(e.request)
+      .then(resp => {
+        const copy = resp.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return resp;
+      })
+      .catch(() => caches.match(e.request))
   );
 });

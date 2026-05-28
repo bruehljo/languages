@@ -691,6 +691,13 @@
   .help-box li{margin-bottom:6px}
   .help-box strong{color:var(--ink);font-weight:600}
   .help-box em{color:var(--primary);font-style:normal;background:rgba(0,0,0,.04);padding:1px 4px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .offline-status{
+    margin-top:14px;padding:10px 12px;border-radius:8px;
+    font-size:12.5px;font-weight:600;text-align:center;
+    background:var(--surface-2);color:var(--muted);
+  }
+  .offline-status.ready{background:var(--success-bg);color:var(--secondary-dark)}
+  .offline-status.notready{background:var(--error-bg);color:var(--primary-dark)}
 </style>
 </head>
 <body>
@@ -774,6 +781,7 @@
       </ol>
       <p><strong>Offline-Nutzung:</strong> Beim ersten Öffnen mit Internet speichert sich die App selbst komplett auf dem Gerät. Danach startet sie auch im Flugmodus — sowohl auf iOS als auch Android. Tipp: einmal mit Netz öffnen, kurz warten, dann ist sie offline-bereit.</p>
       <p>Damit die Aussprache offline klappt, vorher einmal pro Sprache auf einen Lautsprecher tippen — iOS/Android lädt die Stimme dann einmalig herunter.</p>
+      <div class="offline-status" id="offlineStatus">Offline-Status wird geprüft …</div>
     </div>
   </div>
 </div>
@@ -7169,7 +7177,42 @@ document.getElementById("settingsBtn").addEventListener("click", ()=>{
   document.getElementById("speakRate").value = state.settings.rate;
   document.getElementById("rateVal").textContent = state.settings.rate.toFixed(2);
   loadVoices();
+  updateOfflineStatus();
 });
+
+// Prüft, ob die App offline-bereit ist (Service Worker aktiv + Cache vorhanden)
+function updateOfflineStatus(){
+  const el = document.getElementById("offlineStatus");
+  if(!el) return;
+  if(location.protocol === "file:"){
+    el.className = "offline-status";
+    el.textContent = "Lokale Datei — Offline-Cache nur über eine Web-Adresse (z.B. GitHub Pages).";
+    return;
+  }
+  if(!("serviceWorker" in navigator)){
+    el.className = "offline-status notready";
+    el.textContent = "Dieser Browser unterstützt keinen Offline-Modus.";
+    return;
+  }
+  Promise.all([
+    navigator.serviceWorker.getRegistration(),
+    (window.caches ? caches.has("sprachen-v5") : Promise.resolve(false))
+  ]).then(([reg, hasCache])=>{
+    if(reg && navigator.serviceWorker.controller && hasCache){
+      el.className = "offline-status ready";
+      el.textContent = "✓ Offline bereit — funktioniert auch im Flugmodus.";
+    } else if(reg && navigator.serviceWorker.controller){
+      el.className = "offline-status";
+      el.textContent = "Wird gerade gespeichert … Seite einmal neu laden, dann ist sie offline-bereit.";
+    } else {
+      el.className = "offline-status";
+      el.textContent = "Noch nicht offline-bereit. Lade die Seite einmal mit Internet neu.";
+    }
+  }).catch(()=>{
+    el.className = "offline-status";
+    el.textContent = "Offline-Status nicht ermittelbar.";
+  });
+}
 document.getElementById("closeModal").addEventListener("click", ()=>modal.classList.remove("show"));
 modal.addEventListener("click", e=>{ if(e.target===modal) modal.classList.remove("show"); });
 document.querySelectorAll(".toggle").forEach(t=>{
@@ -7245,8 +7288,27 @@ renderView();
 // wird es ignoriert — dort lädt der Browser die Datei ohnehin lokal.
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      // Regelmäßig auf eine neue Version prüfen
+      reg.addEventListener("updatefound", () => {
+        const sw = reg.installing;
+        if(!sw) return;
+        sw.addEventListener("statechange", () => {
+          // Neue Version installiert und es gab schon eine alte → einmal neu laden
+          if(sw.state === "installed" && navigator.serviceWorker.controller){
+            window.location.reload();
+          }
+        });
+      });
+    }).catch(() => {
       // still und leise ignorieren – App funktioniert auch ohne SW online
+    });
+    // Beim Wechsel des aktiven Service Workers ebenfalls einmal neu laden
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if(reloaded) return;
+      reloaded = true;
+      window.location.reload();
     });
   });
 }
