@@ -6851,17 +6851,39 @@ function bindExercise(ex, c, node){
 }
 
 // FLASHCARDS
-let cardIdx = 0; let cardFlipped = false;
+// Karteikarten einer Lektion — mit Wiederholungs-Warteschlange.
+// "Noch nicht"-Karten wandern ans Ende und kommen erneut dran, bis alle sitzen.
+let lessonQueue = [];
+let lessonPos = 0;
+let lessonFlipped = false;
+let lessonStartCount = 0;
+let lessonRepeats = 0;
+
 function renderFlashcards(node, c){
-  cardIdx = 0; cardFlipped = false;
+  // Warteschlange = alle Vokabeln des Kapitels in Originalreihenfolge
+  lessonQueue = c.vocab.map((v,i)=>({ vocab:v, idx:i, key:c.id+'.'+i }));
+  lessonPos = 0;
+  lessonFlipped = false;
+  lessonStartCount = lessonQueue.length;
+  lessonRepeats = 0;
+  if(!lessonQueue.length){
+    node.innerHTML = `<div class="ex-card" style="text-align:center;padding:40px 24px">
+      <p style="color:var(--ink-soft)">Dieses Kapitel hat keine Vokabeln.</p></div>`;
+    return;
+  }
   drawCard(node, c);
 }
+
 function drawCard(node, c){
-  const v = c.vocab[cardIdx];
+  const item = lessonQueue[lessonPos];
+  const v = item.vocab;
+  const total = lessonStartCount;
+  // Position für die Anzeige: wie viele eindeutige Karten schon "kann ich"
+  const remaining = lessonQueue.length - lessonPos;
   node.innerHTML = `
-    <div class="flash-meta">Karte ${cardIdx+1} von ${c.vocab.length}</div>
+    <div class="flash-meta">Noch ${remaining} ${remaining===1?'Karte':'Karten'}${lessonRepeats>0?` · ${lessonRepeats} zur Wiederholung`:''}</div>
     <div class="flash-stage">
-      <div class="flash-card ${cardFlipped?'flipped':''}" id="fcard">
+      <div class="flash-card ${lessonFlipped?'flipped':''}" id="fcard">
         <div class="flash-face front">
           <div class="flash-es">${v.es}</div>
           ${state.settings.showIPA && v.ipa?`<div class="flash-ipa">[${v.ipa}]</div>`:""}
@@ -6885,32 +6907,35 @@ function drawCard(node, c){
   const card = node.querySelector("#fcard");
   card.addEventListener("click", e=>{
     if(e.target.closest(".speak-btn")) return;
-    cardFlipped = !cardFlipped;
+    lessonFlipped = !lessonFlipped;
     card.classList.toggle("flipped");
-    if(cardFlipped && state.settings.autoSpeak) speak(v.es);
+    if(lessonFlipped && state.settings.autoSpeak) speak(v.es);
   });
   node.querySelector(".speak-btn").addEventListener("click", e=>{ e.stopPropagation(); speak(v.es, e.currentTarget); });
   node.querySelector("#know").addEventListener("click", ()=>{
-    const key = c.id+'.'+cardIdx;
-    state.vocabKnown[key] = true;
-    srsKnow(key);
+    state.vocabKnown[item.key] = true;
+    srsKnow(item.key);
+    if(lessonPos >= lessonStartCount && lessonRepeats > 0) lessonRepeats--;
     nextCard(node,c);
   });
   node.querySelector("#dunno").addEventListener("click", ()=>{
-    const key = c.id+'.'+cardIdx;
-    state.vocabKnown[key] = false;
-    srsDontKnow(key);
+    state.vocabKnown[item.key] = false;
+    srsDontKnow(item.key);
+    // Karte ans Ende der Warteschlange hängen → kommt nochmal dran
+    lessonQueue.push(item);
+    lessonRepeats++;
     nextCard(node,c);
   });
-  if(!cardFlipped && state.settings.autoSpeak) speak(v.es);
+  if(!lessonFlipped && state.settings.autoSpeak) speak(v.es);
 }
+
 function nextCard(node, c){
-  cardIdx++;
-  cardFlipped = false;
-  if(cardIdx >= c.vocab.length){
+  lessonPos++;
+  lessonFlipped = false;
+  if(lessonPos >= lessonQueue.length){
     node.innerHTML = `<div class="ex-card" style="text-align:center;padding:40px 24px">
       <div style="font-family:ui-serif,Palatino,serif;font-style:italic;font-size:32px;color:var(--primary);margin-bottom:8px">¡Bien hecho!</div>
-      <p style="color:var(--ink-soft);margin-bottom:18px">Du hast alle ${c.vocab.length} Vokabeln dieses Kapitels durchgegangen.</p>
+      <p style="color:var(--ink-soft);margin-bottom:18px">Du hast alle ${lessonStartCount} Vokabeln dieses Kapitels durchgearbeitet — auch die, die du erst wiederholen musstest.</p>
       <button class="btn btn-primary" id="again">Nochmal von vorne</button>
     </div>`;
     node.querySelector("#again").addEventListener("click", ()=>renderFlashcards(node, c));
@@ -6919,17 +6944,20 @@ function nextCard(node, c){
   drawCard(node, c);
 }
 
+
 // ------------------ WIEDERVORLAGE (Review-Modus) ------------------
 let reviewQueue = [];
 let reviewPos = 0;
 let reviewFlipped = false;
 let reviewStartCount = 0;
+let reviewRepeats = 0;
 
 function renderReview(root){
   reviewQueue = srsCollectDue();
   reviewPos = 0;
   reviewFlipped = false;
   reviewStartCount = reviewQueue.length;
+  reviewRepeats = 0;
   if(!reviewQueue.length){
     root.innerHTML = `
       <div class="trainer-hero">
@@ -6950,9 +6978,11 @@ function renderReview(root){
 function drawReviewCard(root){
   const item = reviewQueue[reviewPos];
   const v = item.vocab;
+  const remaining = reviewQueue.length - reviewPos;
   const total = reviewStartCount;
-  const doneN = reviewPos;
-  const pct = total ? Math.round(doneN/total*100) : 0;
+  // Fortschritt = wie viele der ursprünglich fälligen Karten erledigt sind
+  const doneOriginal = Math.min(reviewPos, total);
+  const pct = total ? Math.round(doneOriginal/total*100) : 0;
   root.innerHTML = `
     <div class="trainer-hero" style="padding-bottom:8px">
       <button class="back-btn" id="backBtn">
@@ -6963,7 +6993,7 @@ function drawReviewCard(root){
       <h1 class="ch-hero-title">Vokabeln <em>wiederholen</em></h1>
     </div>
     <div class="review-progress">
-      <span>${doneN} / ${total}</span>
+      <span>Noch ${remaining}${reviewRepeats>0?` · ${reviewRepeats} zur Wiederholung`:''}</span>
       <div class="review-progress-bar"><div class="review-progress-fill" style="width:${pct}%"></div></div>
     </div>
     <div class="flash-meta">${item.chapterTitle}</div>
@@ -7001,6 +7031,8 @@ function drawReviewCard(root){
   root.querySelector("#rknow").addEventListener("click", ()=>{
     state.vocabKnown[item.key] = true;
     srsKnow(item.key);
+    // War das eine Wiederholungskarte (jenseits des ursprünglichen Stapels)? Dann Zähler senken.
+    if(reviewPos >= reviewStartCount && reviewRepeats > 0) reviewRepeats--;
     nextReviewCard(root);
   });
   root.querySelector("#rdunno").addEventListener("click", ()=>{
@@ -7008,6 +7040,7 @@ function drawReviewCard(root){
     srsDontKnow(item.key);
     // "Noch nicht" → ans Ende des aktuellen Stapels hängen, kommt nochmal dran
     reviewQueue.push(item);
+    reviewRepeats++;
     nextReviewCard(root);
   });
   if(!reviewFlipped && state.settings.autoSpeak) speak(v.es);

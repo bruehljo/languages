@@ -1,5 +1,5 @@
 /* Service Worker — Sprachkurs Offline-Cache */
-const CACHE = 'sprachen-v2';
+const CACHE = 'sprachen-v3';
 const FILES = [
   './',
   './index.html',
