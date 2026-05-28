@@ -1,0 +1,31 @@
+{
+  "name": "Sprachkurs · Spanisch · Portugiesisch · Kroatisch",
+  "short_name": "Sprachen",
+  "description": "Offline-Sprachkurs auf Niveau A1+A2 für Spanisch, europäisches Portugiesisch und Kroatisch.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf3e7",
+  "theme_color": "#c44536",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ]
+}
