@@ -732,12 +732,13 @@
       <p><strong>Wie eine echte App (Home-Bildschirm, eigenes Icon):</strong> Dafür braucht die Datei eine Web-Adresse. Mit GitHub geht das schnell:</p>
       <ol>
         <li>Neues <strong>Public Repository</strong> auf github.com anlegen, z.B. „sprachen".</li>
-        <li>Dateien hochladen: <em>spanisch.html</em> (oder als <em>index.html</em>), <em>icon.svg</em>, <em>icon-180.png</em>, <em>icon-192.png</em>, <em>icon.png</em>, <em>manifest.webmanifest</em>.</li>
+        <li>Dateien hochladen: <em>index.html</em>, <em>sw.js</em>, <em>icon.svg</em>, <em>icon-180.png</em>, <em>icon-192.png</em>, <em>icon.png</em>, <em>manifest.webmanifest</em>.</li>
         <li>In <em>Settings → Pages</em> bei <em>Source</em> „Deploy from a branch", Branch <em>main</em>, Folder <em>/(root)</em> → Save.</li>
         <li>Nach 1–2 Minuten ist die App unter <em>username.github.io/sprachen/</em> erreichbar.</li>
         <li>iPhone: URL in <strong>Safari</strong> öffnen → unten <strong>Teilen → Zum Home-Bildschirm</strong>. Das Icon erscheint mit „Hola/Olá/Bok".</li>
       </ol>
-      <p>Sobald die App einmal geladen ist, läuft alles offline weiter — auch ohne Netz.</p>
+      <p><strong>Offline-Nutzung:</strong> Beim ersten Öffnen mit Internet speichert sich die App selbst komplett auf dem Gerät. Danach startet sie auch im Flugmodus — sowohl auf iOS als auch Android. Tipp: einmal mit Netz öffnen, kurz warten, dann ist sie offline-bereit.</p>
+      <p>Damit die Aussprache offline klappt, vorher einmal pro Sprache auf einen Lautsprecher tippen — iOS/Android lädt die Stimme dann einmalig herunter.</p>
     </div>
   </div>
 </div>
@@ -6929,6 +6930,19 @@ langModal.addEventListener("click", e=>{ if(e.target===langModal) langModal.clas
 // ------------------ INIT ------------------
 applyLanguage(state.lang || "es");
 renderView();
+
+// ------------------ OFFLINE / SERVICE WORKER ------------------
+// Registriert den Service Worker, damit die App nach dem ersten
+// Laden komplett offline läuft (auch im Flugmodus, auch nach Neustart).
+// Funktioniert über https:// (z.B. GitHub Pages). Bei lokalem file://
+// wird es ignoriert — dort lädt der Browser die Datei ohnehin lokal.
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {
+      // still und leise ignorieren – App funktioniert auch ohne SW online
+    });
+  });
+}
 </script>
 </body>
 </html>
