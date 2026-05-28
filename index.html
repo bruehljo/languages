@@ -485,6 +485,41 @@
   .trainer-cta-arrow{color:var(--muted)}
   .trainer-cta-arrow svg{width:18px;height:18px}
 
+  /* Wiedervorlage-Karte */
+  .review-cta{
+    background:var(--paper);border:1px solid var(--border-soft);border-radius:var(--radius);
+    padding:18px;display:flex;align-items:center;gap:16px;cursor:pointer;
+    transition:all .2s;position:relative;overflow:hidden;margin-bottom:12px;
+  }
+  .review-cta::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--primary);
+  }
+  .review-cta.done{cursor:default}
+  .review-cta.done::before{background:var(--secondary)}
+  .review-cta:not(.done):active{transform:translateY(1px)}
+  .review-cta-badge{
+    width:48px;height:48px;border-radius:12px;flex:none;
+    background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+    display:grid;place-items:center;color:#fff;
+    font-family:ui-serif,Palatino,serif;font-size:22px;font-weight:600;
+  }
+  .review-cta-badge.ok{background:linear-gradient(135deg,var(--secondary),var(--secondary-dark))}
+  .review-cta-body{flex:1;min-width:0}
+  .review-cta-title{font-family:ui-serif,Palatino,serif;font-size:19px;color:var(--ink);letter-spacing:-.2px;margin-bottom:2px}
+  .review-cta-sub{font-size:12px;color:var(--muted);letter-spacing:.02em}
+
+  /* Wiedervorlage-Fortschritt im Review-Modus */
+  .review-progress{
+    display:flex;align-items:center;gap:10px;margin-bottom:18px;
+    font-size:13px;color:var(--ink-soft);
+  }
+  .review-progress-bar{
+    flex:1;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;
+  }
+  .review-progress-fill{
+    height:100%;background:var(--secondary);border-radius:3px;transition:width .3s;
+  }
+
   .trainer-hero{padding:18px 4px 14px}
   .trainer-bar{
     background:var(--paper);border:1px solid var(--border-soft);border-radius:var(--radius);
@@ -6092,11 +6127,13 @@ function applyLanguage(code){
   if(typeof document !== "undefined" && document.body) document.body.className = "theme-" + LANGDATA.theme;
   // Per-Sprache-Fortschritt verknüpfen
   if(!state.byLang) state.byLang = {};
-  if(!state.byLang[code]) state.byLang[code] = { done:{}, exDone:{}, vocabKnown:{}, mastered:{} };
+  if(!state.byLang[code]) state.byLang[code] = { done:{}, exDone:{}, vocabKnown:{}, mastered:{}, srs:{} };
+  if(!state.byLang[code].srs) state.byLang[code].srs = {};
   state.done = state.byLang[code].done;
   state.exDone = state.byLang[code].exDone;
   state.vocabKnown = state.byLang[code].vocabKnown;
   state.mastered = state.byLang[code].mastered;
+  state.srs = state.byLang[code].srs;
   state.lang = code;
   if(typeof document !== "undefined") document.title = LANGDATA.brand + " — " + LANGDATA.name + " lernen";
   // Trainer-Verb auf erstes Verb der Sprache setzen, falls aktuell nicht vorhanden
@@ -6108,8 +6145,8 @@ function applyLanguage(code){
 const STORE_KEY = "hola_v1";
 const defaultState = {
   lang:"es",      // aktuell gewählte Sprache
-  byLang:{},      // {lang: {done, exDone, vocabKnown, mastered}}
-  done:{}, exDone:{}, vocabKnown:{}, mastered:{}, // werden per applyLanguage verlinkt
+  byLang:{},      // {lang: {done, exDone, vocabKnown, mastered, srs}}
+  done:{}, exDone:{}, vocabKnown:{}, mastered:{}, srs:{}, // werden per applyLanguage verlinkt
   settings:{
     autoSpeak:true,
     rate:0.9,
@@ -6194,6 +6231,7 @@ function renderView(){
   if(current.view === "home") renderHome(root);
   else if(current.view === "chapter") renderChapter(root, current.chapter);
   else if(current.view === "verbtrainer") renderVerbTrainer(root);
+  else if(current.view === "review") renderReview(root);
   window.scrollTo({top:0});
 }
 
@@ -6213,6 +6251,11 @@ function renderHome(root){
 
   const noChapters = total === 0;
   const trainerCount = VERBS.length;
+
+  // Fällige Wiedervorlage-Karten der aktuellen Sprache zählen
+  const dueInfo = srsDueCountForLang(LANGDATA, state.srs);
+  // Heute schon gelernte Karten (Statistik)
+  const reviewedToday = countReviewedToday();
 
   root.innerHTML = `
     <div class="hero">
@@ -6244,6 +6287,26 @@ function renderHome(root){
     </div>
     ${trainerCount ? `
     <div class="section-label">Üben</div>
+    ${dueInfo.due > 0 ? `
+    <div class="review-cta" id="reviewCta">
+      <div class="review-cta-badge">${dueInfo.due}</div>
+      <div class="review-cta-body">
+        <div class="review-cta-title">Vokabeln wiederholen</div>
+        <div class="review-cta-sub">${dueInfo.due} ${dueInfo.due===1?'Karte ist':'Karten sind'} fällig${reviewedToday>0?` · heute schon ${reviewedToday} gelernt`:''}</div>
+      </div>
+      <div class="trainer-cta-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>` : `
+    <div class="review-cta done" id="reviewCtaDone">
+      <div class="review-cta-badge ok">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="review-cta-body">
+        <div class="review-cta-title">Alles wiederholt</div>
+        <div class="review-cta-sub">Keine Vokabeln fällig. Komm später wieder oder lerne neue Karten.</div>
+      </div>
+    </div>`}
     <div class="trainer-cta" id="trainerCta">
       <div class="trainer-cta-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
@@ -6294,6 +6357,11 @@ function renderHome(root){
     if(VERBS.length){
       trainer = { verb:VERBS[0].id, tense:TENSES[0].key, answers:["","","","","",""], checked:false, results:null };
     }
+    renderView();
+  });
+  const rc = root.querySelector("#reviewCta");
+  if(rc) rc.addEventListener("click", ()=>{
+    current = { view:"review" };
     renderView();
   });
   const hc = root.querySelector("#langHintClose");
@@ -6823,10 +6891,16 @@ function drawCard(node, c){
   });
   node.querySelector(".speak-btn").addEventListener("click", e=>{ e.stopPropagation(); speak(v.es, e.currentTarget); });
   node.querySelector("#know").addEventListener("click", ()=>{
-    state.vocabKnown[c.id+'.'+cardIdx] = true; saveState(); nextCard(node,c);
+    const key = c.id+'.'+cardIdx;
+    state.vocabKnown[key] = true;
+    srsKnow(key);
+    nextCard(node,c);
   });
   node.querySelector("#dunno").addEventListener("click", ()=>{
-    state.vocabKnown[c.id+'.'+cardIdx] = false; saveState(); nextCard(node,c);
+    const key = c.id+'.'+cardIdx;
+    state.vocabKnown[key] = false;
+    srsDontKnow(key);
+    nextCard(node,c);
   });
   if(!cardFlipped && state.settings.autoSpeak) speak(v.es);
 }
@@ -6843,6 +6917,206 @@ function nextCard(node, c){
     return;
   }
   drawCard(node, c);
+}
+
+// ------------------ WIEDERVORLAGE (Review-Modus) ------------------
+let reviewQueue = [];
+let reviewPos = 0;
+let reviewFlipped = false;
+let reviewStartCount = 0;
+
+function renderReview(root){
+  reviewQueue = srsCollectDue();
+  reviewPos = 0;
+  reviewFlipped = false;
+  reviewStartCount = reviewQueue.length;
+  if(!reviewQueue.length){
+    root.innerHTML = `
+      <div class="trainer-hero">
+        <button class="back-btn" id="backBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Übersicht
+        </button>
+        <div class="ch-hero-meta">Wiedervorlage</div>
+        <h1 class="ch-hero-title">Alles <em>erledigt</em></h1>
+        <p class="ch-hero-desc">Gerade sind keine Vokabeln fällig. Lerne neue Karten in den Kapiteln oder komm später wieder.</p>
+      </div>`;
+    root.querySelector("#backBtn").addEventListener("click", ()=>{ current={view:"home"}; renderView(); });
+    return;
+  }
+  drawReviewCard(root);
+}
+
+function drawReviewCard(root){
+  const item = reviewQueue[reviewPos];
+  const v = item.vocab;
+  const total = reviewStartCount;
+  const doneN = reviewPos;
+  const pct = total ? Math.round(doneN/total*100) : 0;
+  root.innerHTML = `
+    <div class="trainer-hero" style="padding-bottom:8px">
+      <button class="back-btn" id="backBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Übersicht
+      </button>
+      <div class="ch-hero-meta">Wiedervorlage · ${LANGDATA.name}</div>
+      <h1 class="ch-hero-title">Vokabeln <em>wiederholen</em></h1>
+    </div>
+    <div class="review-progress">
+      <span>${doneN} / ${total}</span>
+      <div class="review-progress-bar"><div class="review-progress-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="flash-meta">${item.chapterTitle}</div>
+    <div class="flash-stage">
+      <div class="flash-card ${reviewFlipped?'flipped':''}" id="rcard">
+        <div class="flash-face front">
+          <div class="flash-es">${v.es}</div>
+          ${state.settings.showIPA && v.ipa?`<div class="flash-ipa">[${v.ipa}]</div>`:""}
+          <button class="speak-btn" data-speak="${escAttr(v.es)}" style="margin-top:18px;width:44px;height:44px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>
+          <div class="flash-hint">Tippen zum Umdrehen</div>
+        </div>
+        <div class="flash-face back">
+          <div class="flash-de">${v.de}</div>
+          <div class="flash-es" style="font-size:20px;margin-top:14px;opacity:.7">${v.es}</div>
+          <div class="flash-hint">Tippen zum Umdrehen</div>
+        </div>
+      </div>
+    </div>
+    <div class="flash-controls">
+      <button class="flash-btn dunno" id="rdunno">Noch nicht</button>
+      <button class="flash-btn know" id="rknow">Kann ich</button>
+    </div>
+  `;
+  root.querySelector("#backBtn").addEventListener("click", ()=>{ current={view:"home"}; renderView(); });
+  const card = root.querySelector("#rcard");
+  card.addEventListener("click", e=>{
+    if(e.target.closest(".speak-btn")) return;
+    reviewFlipped = !reviewFlipped;
+    card.classList.toggle("flipped");
+    if(reviewFlipped && state.settings.autoSpeak) speak(v.es);
+  });
+  root.querySelector(".speak-btn").addEventListener("click", e=>{ e.stopPropagation(); speak(v.es, e.currentTarget); });
+  root.querySelector("#rknow").addEventListener("click", ()=>{
+    state.vocabKnown[item.key] = true;
+    srsKnow(item.key);
+    nextReviewCard(root);
+  });
+  root.querySelector("#rdunno").addEventListener("click", ()=>{
+    state.vocabKnown[item.key] = false;
+    srsDontKnow(item.key);
+    // "Noch nicht" → ans Ende des aktuellen Stapels hängen, kommt nochmal dran
+    reviewQueue.push(item);
+    nextReviewCard(root);
+  });
+  if(!reviewFlipped && state.settings.autoSpeak) speak(v.es);
+}
+
+function nextReviewCard(root){
+  reviewPos++;
+  reviewFlipped = false;
+  if(reviewPos >= reviewQueue.length){
+    const learned = countReviewedToday();
+    root.innerHTML = `
+      <div class="trainer-hero">
+        <button class="back-btn" id="backBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Übersicht
+        </button>
+        <div class="ch-hero-meta">Wiedervorlage</div>
+        <h1 class="ch-hero-title">Runde <em>geschafft</em></h1>
+        <p class="ch-hero-desc">Du hast alle fälligen Karten wiederholt${learned?` — heute insgesamt ${learned} Karten gelernt`:''}. Karten, die du sicher kannst, kommen erst in einigen Tagen wieder.</p>
+      </div>
+      <button class="btn btn-primary" id="backHome" style="width:100%">Zurück zur Übersicht</button>`;
+    root.querySelector("#backBtn").addEventListener("click", ()=>{ current={view:"home"}; renderView(); });
+    root.querySelector("#backHome").addEventListener("click", ()=>{ current={view:"home"}; renderView(); });
+    return;
+  }
+  drawReviewCard(root);
+}
+
+// ------------------ SPACED REPETITION (Leitner) ------------------
+// Leitner-Boxen: Level 0..5. Intervalle in Tagen bis zur nächsten Wiedervorlage.
+const SRS_INTERVALS = [0, 1, 3, 7, 16, 35]; // Level 0 = sofort fällig
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function srsKey(chapterId, vocabIdx){ return chapterId + "." + vocabIdx; }
+
+// Liefert den SRS-Eintrag oder legt einen neuen an (Level 0, sofort fällig)
+function srsGet(key){
+  return state.srs[key] || null;
+}
+
+// Karte als "gewusst" markieren: Level +1, neue Fälligkeit setzen
+function srsKnow(key){
+  const cur = state.srs[key] || { level:0, due:0 };
+  const level = Math.min(cur.level + 1, SRS_INTERVALS.length - 1);
+  state.srs[key] = { level, due: Date.now() + SRS_INTERVALS[level] * DAY_MS, last: Date.now() };
+  bumpReviewedToday();
+  saveState();
+}
+
+// Karte als "noch nicht" markieren: zurück auf Level 0, sofort wieder fällig
+function srsDontKnow(key){
+  state.srs[key] = { level:0, due: Date.now(), last: Date.now() };
+  bumpReviewedToday();
+  saveState();
+}
+
+// Tages-Zähler (sprachübergreifend, in settings)
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();
+}
+function bumpReviewedToday(){
+  if(!state.settings.reviewDay || state.settings.reviewDay !== todayStr()){
+    state.settings.reviewDay = todayStr();
+    state.settings.reviewCount = 0;
+  }
+  state.settings.reviewCount = (state.settings.reviewCount || 0) + 1;
+}
+function countReviewedToday(){
+  if(state.settings.reviewDay === todayStr()) return state.settings.reviewCount || 0;
+  return 0;
+}
+
+// Ist eine Karte aktuell fällig? (noch nie gesehen ODER due-Zeit erreicht)
+function srsDue(key){
+  const e = state.srs[key];
+  if(!e) return true;            // neue Karte: fällig
+  return e.due <= Date.now();
+}
+
+// Zählt fällige Karten in EINER Sprache (über alle Kapitel, die freigeschaltet/begonnen sind)
+function srsDueCountForLang(langData, srsObj){
+  let due = 0, total = 0;
+  langData.chapters.forEach(c=>{
+    c.vocab.forEach((v,i)=>{
+      total++;
+      const key = srsKey(c.id, i);
+      const e = srsObj[key];
+      if(!e || e.due <= Date.now()) due++;
+    });
+  });
+  return { due, total };
+}
+
+// Sammelt alle fälligen Karten der AKTUELLEN Sprache als Lern-Stapel
+function srsCollectDue(){
+  const due = [];
+  CHAPTERS.forEach(c=>{
+    c.vocab.forEach((v,i)=>{
+      const key = srsKey(c.id, i);
+      if(srsDue(key)) due.push({ vocab:v, key, chapterId:c.id, chapterTitle:c.title });
+    });
+  });
+  // Mische den Stapel, damit nicht immer dieselbe Reihenfolge
+  for(let i=due.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [due[i],due[j]] = [due[j],due[i]];
+  }
+  return due;
 }
 
 // ------------------ UTILS ------------------
